@@ -29,7 +29,6 @@ def extract_text(uploaded_file):
     else:
         raise Exception("Unsupported file format")
 
-
 # ----------- API CALL -----------
 def get_gemini_response(prompt, api_key):
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
@@ -62,26 +61,26 @@ Scoring Logic:
 2. Skill Match - {weights['skills']}%
 3. Education Quality - {weights['education']}%
 4. Industry relevance - {weights['industry']}%
-5. Policy Compliance - {weights['policy']}%
 
 Other Rules:
 - Deduct 10% if experience < 2 years.
 - Direct REJECTION if job-hopping <2 years occurred more than twice.
 - Score 0 if working in or ex-JSW, Dulux, Akzo Nobel, Birla Opus.
-- For evaluating colleges/universities use NIRF ranking
--DO NOT reject any candidate IF he has worked in ASIANPAINTS.
-Remark Instructions:
-- {tone_instruction.get(remark_tone, "Use a professional tone.")}
+- For evaluating colleges/universities use NIRF ranking.
+- DO NOT reject candidates for working in Asian Paints.
 
 Return ONLY JSON:
 {{
   "name": "Full name",
   "score": Final score out of 100,
   "education": "Degree and college",
-  "experience": "Total years of experience",
+ "experience": "Total relevant years of experience in the given field in JD (e.g. paints/FMCG/chemicals), plus role-wise company breakdown"
   "skills_matched": ["skill1", "skill2"],
-  "remark": "30-word summary on fitment and verdict"
+  "remark": "30-word summary on fitment and verdict about why they are either Accepted OR Rejected"
 }}
+
+Remark Instructions:
+- {tone_instruction.get(remark_tone, "Use a professional tone.")}
 
 Resume:
 {resume_text}
@@ -138,26 +137,23 @@ def highlight_score(val):
 def main():
     st.title("📄 THE HRminator 💥🤖")
 
-    # Load Gemini API Key from Streamlit Secrets
     api_key = st.secrets["GOOGLE_API_KEY"]
 
     jd = st.text_area("📌 Job Description", placeholder="Paste the job description here...")
 
     st.markdown("### 🎯 Scoring Criteria Weights (Total must be 100%)")
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
         experience_weight = st.number_input("Experience Match %", min_value=0, max_value=100, value=40)
         skills_weight = st.number_input("Skill Match %", min_value=0, max_value=100, value=20)
     with col2:
         education_weight = st.number_input("Education Quality %", min_value=0, max_value=100, value=10)
-        industry_weight = st.number_input("Industry Relevance %", min_value=0, max_value=100, value=20)
-    with col3:
-        policy_weight = st.number_input("Policy Compliance %", min_value=0, max_value=100, value=10)
+        industry_weight = st.number_input("Industry Relevance %", min_value=0, max_value=100, value=30)
 
     st.markdown("### 💬 Remark Style")
     remark_tone = st.selectbox("Choose AI Remark Tone", ["Professional", "Critical", "Blunt"])
 
-    total = experience_weight + skills_weight + education_weight + industry_weight + policy_weight
+    total = experience_weight + skills_weight + education_weight + industry_weight
     if total != 100:
         st.error(f"Total is {total}%. Adjust to equal 100.")
         return
@@ -166,8 +162,7 @@ def main():
         "experience": experience_weight,
         "skills": skills_weight,
         "education": education_weight,
-        "industry": industry_weight,
-        "policy": policy_weight
+        "industry": industry_weight
     }
 
     uploaded_files = st.file_uploader("📎 Upload Resumes (PDF or Word)", type=["pdf", "docx"], accept_multiple_files=True)
@@ -196,7 +191,7 @@ def main():
                         "score": int(response_json.get("score", 0)),
                         "education": response_json.get("education", "N/A"),
                         "experience": response_json.get("experience", "N/A"),
-                        "skills_matched": response_json.get("skills_matched", []),
+                        "skills_matched": ", ".join(response_json.get("skills_matched", [])),
                         "remark": response_json.get("remark", "N/A"),
                     })
                 except Exception as e:
@@ -208,7 +203,6 @@ def main():
         st.info(f"**Expected Experience:** {exp_required}\n\n**Required Education:** {qualification}\n\n**Key Skills Required:** {skills_required}")
 
         df = pd.DataFrame(st.session_state.results)
-        df["skills_matched"] = df["skills_matched"].apply(lambda x: ", ".join(x))
         df.sort_values(by="score", ascending=False, inplace=True)
 
         accepted_df = df[df['score'] >= 60].reset_index(drop=True)
