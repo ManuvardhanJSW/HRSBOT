@@ -23,7 +23,6 @@ def get_gemini_response(prompt):
         try:
             response_json = json.loads(response.text)
 
-            # Ensure all expected fields exist
             required_fields = ["name", "score", "education", "experience", "skills_matched", "remark"]
             for field in required_fields:
                 if field not in response_json:
@@ -41,6 +40,8 @@ def get_gemini_response(prompt):
 
     except Exception as e:
         raise Exception(f"Error generating response: {str(e)}")
+
+# ----------------- Resume Text Extraction -----------------
 
 def extract_pdf_text(uploaded_file):
     """Extract text from a PDF file with error handling."""
@@ -81,10 +82,18 @@ def extract_text(uploaded_file):
     else:
         raise Exception("Unsupported file type. Only PDF and DOCX are allowed.")
 
-def prepare_prompt(resume_text, job_description, weights):
+# ----------------- Prompt Generator -----------------
+
+def prepare_prompt(resume_text, job_description, weights, remark_tone="Professional"):
     """Prepare a structured prompt for Gemini using dynamic weights."""
     if not resume_text or not job_description:
         raise ValueError("Resume text and job description cannot be empty")
+
+    tone_instruction = {
+        "Professional": "Use a neutral and formal tone.",
+        "Critical": "Be sharply evaluative, pointing out weaknesses clearly.",
+        "Blunt": "Give a direct, no-nonsense assessment without sugarcoating."
+    }
 
     prompt_template = f"""
 You are acting as a professional HR Manager at JSW Paints with deep expertise in:
@@ -101,7 +110,6 @@ Scoring Logic:
 2. Skill Match - {weights['skills']}%
 3. Education Quality - {weights['education']}%
 4. Industry relevance - {weights['industry']}%
-5. Policy Compliance - {weights['policy']}%
 
 Strict Rules:
 - Deduct 10% if total experience < 2 years.
@@ -110,12 +118,15 @@ Strict Rules:
 - Reject if previously worked at JSW (Ex-JSW).
 - DO NOT score based on mandatory skills. That is handled in a separate step.
 
-Your response must be in this strict JSON format:
+Remark Style:
+- {tone_instruction.get(remark_tone, "Use a professional tone.")}
+
+Return ONLY this strict JSON format:
 {{
   "name": "Full name of the candidate",
   "score": Final score out of 100,
   "education": "Degree and college",
-  "experience": "Total years of experience",
+  "experience": "Total relevant years of experience in the given field in JD (e.g. paints/FMCG/chemicals), plus role-wise company breakdown"
   "skills_matched": ["list", "of", "skills"],
   "remark": "Short 30-word verdict on why selected or not"
 }}
