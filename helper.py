@@ -23,7 +23,11 @@ def get_gemini_response(prompt):
         try:
             response_json = json.loads(response.text)
 
-            required_fields = ["name", "score", "education", "experience", "skills_matched", "remark"]
+            required_fields = [
+                "name", "score", "education", "experience",
+                "skills_matched", "remark", "score_breakdown"
+            ]
+
             for field in required_fields:
                 if field not in response_json:
                     raise ValueError(f"Missing required field: {field}")
@@ -125,8 +129,14 @@ Return ONLY this strict JSON format:
 {{
   "name": "Full name of the candidate",
   "score": Final score out of 100,
+  "score_breakdown": {{
+      "experience": score_from_experience,
+      "skills": score_from_skills,
+      "education": score_from_education,
+      "industry": score_from_industry
+  }},
   "education": "Degree and college",
-  "experience": "Total relevant years of experience in the given field in JD (e.g. paints/FMCG/chemicals), plus role-wise company breakdown"
+  "experience": "Total relevant years of experience in the given field in JD (e.g. paints/FMCG/chemicals), plus role-wise company breakdown",
   "skills_matched": ["list", "of", "skills"],
   "remark": "Short 30-word verdict on why selected or not"
 }}
