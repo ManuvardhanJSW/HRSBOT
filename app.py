@@ -69,12 +69,18 @@ Other Rules:
 - For evaluating colleges/universities use NIRF ranking.
 - DO NOT reject candidates for working in Asian Paints.
 
-Return ONLY JSON:
+Return ONLY JSON in this format:
 {{
   "name": "Full name",
   "score": Final score out of 100,
+  "score_breakdown": {{
+      "experience": score_from_experience,
+      "skills": score_from_skills,
+      "education": score_from_education,
+      "industry": score_from_industry
+  }},
   "education": "Degree and college",
- "experience": "Total relevant years of experience in the given field in JD (e.g. paints/FMCG/chemicals), plus role-wise company breakdown"
+  "experience": "Total relevant years of experience in the given field in JD (e.g. paints/FMCG/chemicals), plus role-wise company breakdown",
   "skills_matched": ["skill1", "skill2"],
   "remark": "30-word summary on fitment and verdict about why they are either Accepted OR Rejected"
 }}
@@ -116,7 +122,15 @@ def extract_comparison_data(jd_text):
 def parse_json_response(text):
     try:
         json_str = re.search(r"\{.*\}", text, re.DOTALL).group()
-        return json.loads(json_str)
+        parsed = json.loads(json_str)
+
+        # Ensure score_breakdown exists and is complete
+        sb = parsed.get("score_breakdown", {})
+        for field in ["experience", "skills", "education", "industry"]:
+            sb.setdefault(field, 0)
+        parsed["score_breakdown"] = sb
+
+        return parsed
     except Exception as e:
         raise ValueError(f"❌ Could not parse JSON from Gemini:\n{text[:500]}...")
 
@@ -185,6 +199,9 @@ def main():
                     response_text = get_gemini_response(prompt, api_key)
                     response_json = parse_json_response(response_text)
 
+                    breakdown = response_json.get("score_breakdown", {})
+                    breakdown_str = f"Exp: {breakdown.get('experience', 0)}, Skills: {breakdown.get('skills', 0)}, Edu: {breakdown.get('education', 0)}, Ind: {breakdown.get('industry', 0)}"
+
                     st.session_state.results.append({
                         "filename": file.name,
                         "name": response_json.get("name", "N/A"),
@@ -193,6 +210,7 @@ def main():
                         "experience": response_json.get("experience", "N/A"),
                         "skills_matched": ", ".join(response_json.get("skills_matched", [])),
                         "remark": response_json.get("remark", "N/A"),
+                        "score_breakdown": breakdown_str  # New field
                     })
                 except Exception as e:
                     st.error(f"{file.name} ❌ Error: {e}")
