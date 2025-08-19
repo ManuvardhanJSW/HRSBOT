@@ -6,6 +6,20 @@ import fitz  # PyMuPDF
 import pandas as pd
 from docx import Document  # Word support
 
+import csv
+from datetime import datetime
+import os
+import time
+
+# ----------- Usage Summary Logger -----------
+def log_usage_summary(log_entry, log_file="usage_log.csv"):
+    file_exists = os.path.isfile(log_file)
+    with open(log_file, mode='a', newline='', encoding='utf-8') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=log_entry.keys())
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(log_entry)
+
 # ----------- File Extraction -----------
 def extract_pdf_text(uploaded_file):
     text = ""
@@ -123,13 +137,10 @@ def parse_json_response(text):
     try:
         json_str = re.search(r"\{.*\}", text, re.DOTALL).group()
         parsed = json.loads(json_str)
-
-        # Ensure score_breakdown exists and is complete
         sb = parsed.get("score_breakdown", {})
         for field in ["experience", "skills", "education", "industry"]:
             sb.setdefault(field, 0)
         parsed["score_breakdown"] = sb
-
         return parsed
     except Exception as e:
         raise ValueError(f"❌ Could not parse JSON from Gemini:\n{text[:500]}...")
@@ -189,6 +200,12 @@ def main():
             st.warning("Please provide both Job Description and Resumes.")
             return
 
+        start_time = time.time()
+        success_count = 0
+        failure_count = 0
+        error_messages = []
+
+
         st.session_state.results = []
 
         with st.spinner("🔍 Analyzing resumes..."):
@@ -210,10 +227,30 @@ def main():
                         "experience": response_json.get("experience", "N/A"),
                         "skills_matched": ", ".join(response_json.get("skills_matched", [])),
                         "remark": response_json.get("remark", "N/A"),
-                        "score_breakdown": breakdown_str  # New field
+                        "score_breakdown": breakdown_str
                     })
+                    success_count += 1
+
                 except Exception as e:
-                    st.error(f"{file.name} ❌ Error: {e}")
+                    error_msg = f"{file.name} ❌ {str(e)}"
+                    st.error(error_msg)
+                    error_messages.append(error_msg)
+                    failure_count += 1
+
+
+        duration = round(time.time() - start_time, 2)
+        log_usage_summary({
+            "timestamp": datetime.now().isoformat(),
+            "user_action": "Resume Batch Analysis",
+            "number_of_resumes": len(uploaded_files),
+            "jd_length_words": len(jd.strip().split()),
+            "errors_occurred": failure_count > 0,
+            "success_count": success_count,
+            "failure_count": failure_count,
+            "duration_sec": duration,
+            "error_message": "; ".join(error_messages) if error_messages else "None"
+        })
+
 
     if st.session_state.results:
         st.markdown("### 📌 Job Description Summary")
@@ -231,6 +268,13 @@ def main():
 
         st.markdown("### ❌ First Round: Rejected Candidates")
         st.dataframe(rejected_df.style.applymap(highlight_score, subset=["score"]), use_container_width=True)
+
+    st.markdown("### 📊 Usage Summary Log")
+    if os.path.exists("usage_log.csv"):
+        usage_df = pd.read_csv("usage_log.csv")
+        st.dataframe(usage_df.tail(50), use_container_width=True)
+    else:
+        st.info("No usage logs found yet.")
 
 if __name__ == "__main__":
     main()
